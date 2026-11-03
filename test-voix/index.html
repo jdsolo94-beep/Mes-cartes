@@ -63,6 +63,10 @@ table{width:100%;border-collapse:collapse;font-size:.9rem}td{padding:6px 4px;bor
 const WORDS=[["to borrow","emprunter"],["happy","heureux,content"],["witness","témoin"],["evidence","preuve,preuves"],["reliable","fiable"],["to wonder","se demander"],["thoroughly","minutieusement,à fond"],["meanwhile","pendant ce temps"],["stubborn","têtu,obstiné"],["to arrest","arrêter,interpeller"]];
 const norm=s=>s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[.,!?;:]/g,"").replace(/\s+/g," ").trim().replace(/^to /,"");
 const $=id=>document.getElementById(id);
+// Tolérance : 1 faute sur les mots d'au moins 5 lettres, et réponse trouvée à l'intérieur d'une phrase (« je dirais emprunter »)
+const lev=(a,b)=>{const d=Array.from({length:a.length+1},(_,i)=>[i]);for(let j=1;j<=b.length;j++)d[0][j]=j;for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[a.length][b.length];};
+const strip=s=>s.replace(/^(le |la |les |l'|un |une |des |a |an |the )/,"");
+const match=(heard,sol)=>{const h=strip(norm(heard)),t=strip(sol);if(h===t)return true;if((" "+h+" ").includes(" "+t+" "))return true;return t.length>=5&&lev(h,t)<=1;};
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 let dir="ef", i=0, log=[], last=null, rec=null;
 $("support").innerHTML = SR
@@ -89,7 +93,7 @@ $("mic").onclick=()=>{
   rec.onresult=e=>{
     const alts=[...e.results[0]].map(a=>a.transcript);
     const sols=(dir==="ef"?WORDS[i][1]:WORDS[i][0]).split(",").map(norm);
-    const hit=alts.find(a=>sols.includes(norm(a)));
+    const hit=alts.find(a=>sols.some(t=>match(a,t)));
     const ok=!!hit;
     last={mot:$("word").textContent, entendu:alts[0], ok, juge:"auto", delai:((Date.now()-t0)/1000).toFixed(1)};
     $("result").innerHTML=`<div class="res ${ok?"ok":"ko"}"><b>${ok?"Jugé juste":"Jugé faux"}</b><div class="small">Entendu : « ${alts[0]} »${alts.length>1?"<br>Autres possibilités : "+alts.slice(1).join(" / "):""}</div><div class="small">Réponse attendue : ${(dir==="ef"?WORDS[i][1]:WORDS[i][0]).replace(/,/g,", ")}</div></div>`;
