@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Test de la voix</title>
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+:root{--bg:#EDF3FC;--surface:#fff;--ink:#0E1E3F;--muted:#56698F;--line:#D3DFF2;--accent:#1D5BE0;--good:#13805A;--good-soft:#DCF3E9;--bad:#C0352B;--bad-soft:#FCE5E2}
+@media (prefers-color-scheme: dark){:root{--bg:#081429;--surface:#10213F;--ink:#E6EEFC;--muted:#93A7CC;--line:#1F3560;--accent:#6FA4FF;--good:#5FD39A;--good-soft:#123A2C;--bad:#FF8A80;--bad-soft:#47201E;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,system-ui,sans-serif;padding:calc(16px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 40px max(16px,env(safe-area-inset-left))}
+main{max-width:440px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+h1{margin:0;font-size:1.6rem}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.muted{color:var(--muted)} .small{font-size:.85rem}
+button{font:inherit;border:0;border-radius:12px;padding:12px 14px;font-weight:700;background:var(--accent);color:#fff}
+button.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
+button:disabled{opacity:.5}
+.word{font-size:2rem;font-weight:800;text-align:center}
+.mic{width:84px;height:84px;border-radius:50%;align-self:center;font-size:2rem}
+.mic.on{animation:p 1s infinite}@keyframes p{50%{box-shadow:0 0 0 16px rgba(29,91,224,.15)}}
+.res{border-radius:12px;padding:12px}.ok{background:var(--good-soft);color:var(--good)}.ko{background:var(--bad-soft);color:var(--bad)}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1}
+select{font:inherit;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);width:100%}
+table{width:100%;border-collapse:collapse;font-size:.9rem}td{padding:6px 4px;border-bottom:1px solid var(--line)}
+</style>
+</head>
+<body>
+<main>
+  <div><div class="small muted">Étape 2</div><h1>Test de la voix</h1></div>
+
+  <div class="panel" id="support"></div>
+
+  <div class="panel">
+    <b>1. Reconnaissance vocale</b>
+    <div class="small muted">Dites la traduction du mot affiché. L'application juge seule. Faites les 10 mots, si possible dans un endroit calme puis dans un endroit bruyant.</div>
+    <div class="row"><button class="ghost" id="dirEF">Anglais → Français</button><button class="ghost" id="dirFE">Français → Anglais</button></div>
+    <div class="small muted" id="pos"></div>
+    <div class="word" id="word"></div>
+    <button class="mic" id="mic" aria-label="Parler">🎤</button>
+    <div id="status" class="small muted" style="text-align:center">Touchez le micro puis parlez.</div>
+    <div id="result"></div>
+    <div class="row" id="after" hidden>
+      <button class="ghost" id="wrongjudge">L'appli s'est trompée</button>
+      <button id="next">Mot suivant</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <b>Résultat du test</b>
+    <div id="score" class="small"></div>
+    <table id="log"></table>
+  </div>
+
+  <div class="panel">
+    <b>2. Prononciation (voix de l'iPhone)</b>
+    <select id="voice"></select>
+    <div class="row"><button id="say1">« thoroughly »</button><button id="say2">« to struggle »</button></div>
+  </div>
+</main>
+<script>
+const WORDS=[["to borrow","emprunter"],["happy","heureux,content"],["witness","témoin"],["evidence","preuve,preuves"],["reliable","fiable"],["to wonder","se demander"],["thoroughly","minutieusement,à fond"],["meanwhile","pendant ce temps"],["stubborn","têtu,obstiné"],["to arrest","arrêter,interpeller"]];
+const norm=s=>s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[.,!?;:]/g,"").replace(/\s+/g," ").trim().replace(/^to /,"");
+const $=id=>document.getElementById(id);
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let dir="ef", i=0, log=[], last=null, rec=null;
+$("support").innerHTML = SR
+  ? `<b style="color:var(--good)">Reconnaissance vocale disponible sur cet appareil.</b><div class="small muted">Lors du premier essai, l'iPhone vous demandera l'autorisation d'utiliser le micro : acceptez.</div>`
+  : `<b style="color:var(--bad)">Reconnaissance vocale indisponible ici.</b><div class="small muted">Ouvrez cette page dans Safari sur l'iPhone (iOS 14.5 ou plus récent). Si c'est déjà le cas, le niveau A (réponse manuelle) sera retenu.</div>`;
+if(!SR) $("mic").disabled=true;
+
+function show(){
+  const w=WORDS[i]; $("pos").textContent=`Mot ${i+1} / ${WORDS.length}`;
+  $("word").textContent = dir==="ef" ? w[0] : w[1].split(",")[0];
+  $("result").innerHTML=""; $("after").hidden=true; $("status").textContent="Touchez le micro puis parlez.";
+  $("dirEF").style.background = dir==="ef"?"var(--accent)":""; $("dirEF").style.color = dir==="ef"?"#fff":"";
+  $("dirFE").style.background = dir==="fe"?"var(--accent)":""; $("dirFE").style.color = dir==="fe"?"#fff":"";
+}
+$("dirEF").onclick=()=>{dir="ef";show()}; $("dirFE").onclick=()=>{dir="fe";show()};
+
+$("mic").onclick=()=>{
+  if(!SR) return;
+  rec=new SR(); rec.lang = dir==="ef" ? "fr-FR" : "en-US"; rec.interimResults=false; rec.maxAlternatives=5;
+  const t0=Date.now();
+  rec.onstart=()=>{$("mic").classList.add("on");$("status").textContent="J'écoute…";};
+  rec.onerror=e=>{$("mic").classList.remove("on");$("status").textContent="Erreur : "+e.error+(e.error==="not-allowed"?" (micro refusé : autorisez-le dans Réglages > Safari > Micro)":"");};
+  rec.onend=()=>$("mic").classList.remove("on");
+  rec.onresult=e=>{
+    const alts=[...e.results[0]].map(a=>a.transcript);
+    const sols=(dir==="ef"?WORDS[i][1]:WORDS[i][0]).split(",").map(norm);
+    const hit=alts.find(a=>sols.includes(norm(a)));
+    const ok=!!hit;
+    last={mot:$("word").textContent, entendu:alts[0], ok, juge:"auto", delai:((Date.now()-t0)/1000).toFixed(1)};
+    $("result").innerHTML=`<div class="res ${ok?"ok":"ko"}"><b>${ok?"Jugé juste":"Jugé faux"}</b><div class="small">Entendu : « ${alts[0]} »${alts.length>1?"<br>Autres possibilités : "+alts.slice(1).join(" / "):""}</div><div class="small">Réponse attendue : ${(dir==="ef"?WORDS[i][1]:WORDS[i][0]).replace(/,/g,", ")}</div></div>`;
+    $("after").hidden=false; $("status").textContent="";
+  };
+  rec.start();
+};
+$("wrongjudge").onclick=()=>{ if(last){last.juge="erreur de l'appli"; next();} };
+$("next").onclick=()=>next();
+function next(){ if(last){log.push(last);last=null;} i=(i+1)%WORDS.length; render(); show(); }
+function render(){
+  const n=log.length, good=log.filter(l=>l.juge==="auto").length;
+  $("score").innerHTML = n ? `<b>${good} / ${n}</b> mots bien jugés par l'iPhone (${Math.round(good/n*100)} %). Envoyez-moi ce chiffre.` : "Aucun mot testé pour l'instant.";
+  $("log").innerHTML = log.map(l=>`<tr><td>${l.mot}</td><td>« ${l.entendu} »</td><td>${l.juge==="auto"?"✔︎":"✘"}</td></tr>`).join("");
+}
+render(); show();
+
+// Prononciation
+function voices(){ const v=speechSynthesis.getVoices().filter(v=>v.lang.startsWith("en"));
+  $("voice").innerHTML=v.map((x,k)=>`<option value="${k}">${x.name} (${x.lang})</option>`).join("") || "<option>Voix par défaut</option>"; return v; }
+let V=voices(); speechSynthesis.onvoiceschanged=()=>{V=voices()};
+function say(t){ const u=new SpeechSynthesisUtterance(t); u.lang="en-US"; const v=V[$("voice").value]; if(v) u.voice=v; u.rate=.9; speechSynthesis.cancel(); speechSynthesis.speak(u); }
+$("say1").onclick=()=>say("thoroughly"); $("say2").onclick=()=>say("to struggle");
+</script>
+</body>
+</html>
