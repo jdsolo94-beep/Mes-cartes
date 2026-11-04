@@ -38,7 +38,7 @@ const completerEtat = e => {
   const d = etatParDefaut();
   return { ...d, ...(e || {}), reglages: { ...d.reglages, ...((e && e.reglages) || {}) }, prefs: { ...d.prefs, ...((e && e.prefs) || {}) } };
 };
-const journalDuJour = (etat, jour) => etat.journal && etat.journal.jour === jour ? { bonus: { ef: 0, fe: 0 }, ...etat.journal } : { jour, nouveaux: { ef: 0, fe: 0 }, bonus: { ef: 0, fe: 0 }, revisions: 0 };
+const journalDuJour = (etat, jour) => etat.journal && etat.journal.jour === jour ? { erreurs: { ef: [], fe: [] }, ...etat.journal } : { jour, nouveaux: { ef: 0, fe: 0 }, erreurs: { ef: [], fe: [] }, revisions: 0 };
 
 let voixAnglaise = null;
 function choisirVoix() {
@@ -112,8 +112,11 @@ function Accueil({ mots, etat, jour, aRevoir, nouveauxPrevus, sync, go, exporter
 }
 
 // ---------- Réviser ----------
-function Reviser({ etat, majPrefs, aRevoir, nouveauxDispo, commencer, message, nbAppris, nbNouveaux, entrainement, plusDeNouveaux }) {
+function Reviser({ etat, majPrefs, aRevoir, nouveauxDispo: quotaNouveaux, commencer, message, nbAppris, nbNouveaux, entrainement, revoirErreurs }) {
   const p = etat.prefs;
+  // 10, 20, 40 : la session est complétée avec autant de mots nouveaux que nécessaire ; « Tous » : quota du jour
+  const nouveauxDispo = p.taille === 0 ? quotaNouveaux : nbNouveaux;
+  const erreurs = etat.journal.erreurs[p.dir].length;
   const dispo = aRevoir[p.dir] + nouveauxDispo[p.dir];
   const limite = etat.reprise ? Math.max(0, etat.reprise.parJour - etat.journal.revisions) : Infinity;
   const taille = tailleReelle(p.taille);
@@ -128,16 +131,16 @@ function Reviser({ etat, majPrefs, aRevoir, nouveauxDispo, commencer, message, n
     <div className="stack" style=${{ gap: 8 }}><div className="label">Taille de la session</div>
       <${Seg} options=${TAILLES.map(n => [n, n === 0 ? "Tous" : String(n)])} valeur=${TAILLES.includes(p.taille) ? p.taille : 20} choisir=${v => majPrefs({ taille: v })}/></div>
     <div className="panel"><b>${aRevoir[p.dir]} à réviser + ${etat.reprise ? 0 : nouveauxDispo[p.dir]} nouveaux</b>
-      ${p.taille === 0 && html`<div className="small muted">« Tous » : tous les mots prévus aujourd'hui, plus les nouveaux mots du jour, en une seule session.</div>`}
+      ${p.taille === 0 && html`<div className="small muted">« Tous » : tous les mots prévus aujourd'hui, plus ${etat.reglages.nouveauxParJour} nouveaux mots, en une seule session.</div>`}
       <div className="small muted">${total > 0 ? "Cette session comptera " + total + " carte" + (total > 1 ? "s" : "") + (total < taille && p.taille !== 0 ? " (il n'y en a pas davantage aujourd'hui)." : ".") : "Aucune carte disponible dans cette direction aujourd'hui."}</div></div>
     ${message && html`<div className="banner info small">${message}</div>`}
     <button className="btn primary block" disabled=${dispo === 0} style=${{ fontSize: "1.1rem", padding: 16, opacity: dispo ? 1 : .5 }} onClick=${commencer}>Commencer</button>
-    ${dispo === 0 && (nbAppris[p.dir] > 0 || (nbNouveaux[p.dir] > 0 && !etat.reprise)) && html`<div className="panel stack">
-      <h3>Envie de continuer ?</h3>
-      ${nbAppris[p.dir] > 0 && html`<button className="btn block" onClick=${entrainement}>Entraînement libre</button>
+    ${(erreurs > 0 || (dispo === 0 && nbAppris[p.dir] > 0)) && html`<div className="panel stack">
+      <h3>${dispo === 0 ? "Session du jour terminée" : "Envie de continuer ?"}</h3>
+      ${erreurs > 0 && html`<button className="btn primary block" onClick=${revoirErreurs}>Revoir mes erreurs du jour (${erreurs})</button>
+        <div className="small muted">Les mots ratés aujourd'hui. Juste ou faux, cela ne change rien : ils restent prévus pour demain au plus tôt.</div>`}
+      ${dispo === 0 && nbAppris[p.dir] > 0 && html`<button className="btn block" onClick=${entrainement}>Entraînement libre</button>
         <div className="small muted">Vos mots déjà appris, les moins bien connus d'abord. Aucun effet sur les cases ni sur le calendrier.</div>`}
-      ${nbNouveaux[p.dir] > 0 && !etat.reprise && html`<button className="btn block" onClick=${plusDeNouveaux}>+ 5 nouveaux mots</button>
-        <div className="small muted">Dépasse le quota du jour. Ces mots entrent normalement dans le calendrier (${nbNouveaux[p.dir]} en attente).</div>`}
     </div>`}
   </div>`;
 }
@@ -168,7 +171,7 @@ function Carte({ mot, dir, mode, session, repondre, quitter, ajouter }) {
       <button className="icon-btn" aria-label="Ajouter un mot sans quitter la session" onClick=${ajouter}>${I.plus}</button>
     </div>
     <div className="row between"><span className=${"chip" + (numCase === 0 ? " new" : "")}>${boxLabel(numCase)}</span><span className="small muted">${DIRS[dir]}</span></div>
-    ${session.entrainement && html`<div className="banner info small">Entraînement libre : vos réponses ne changent pas les cases.</div>`}
+    ${session.entrainement && html`<div className="banner info small">Révision libre : vos réponses ne changent pas les cases.</div>`}
     ${actuelle.rattrapage && html`<div className="banner info small">Mot raté reproposé une fois. Cette réponse ne change pas sa case.</div>`}
 
     ${mode === "ecrit" ? html`
@@ -388,7 +391,7 @@ function Reglages({ etat, majReglages, compte, email, sync, exporter, importer }
         <button className="btn ghost" onClick=${() => { setCal(M.REGLAGES_PAR_DEFAUT.intervalles.map(String)); majReglages({ intervalles: [...M.REGLAGES_PAR_DEFAUT.intervalles] }); }}>Valeurs d'origine</button></div>
       <div className="small muted">Un changement s'applique aux prochaines révisions, pas aux dates déjà prévues.</div>
     </div>
-    <div className="panel row between"><div><h3>Nouveaux mots par jour</h3><div className="small muted">Par direction · suspendu en mode reprise</div></div>
+    <div className="panel row between"><div><h3>Nouveaux mots par jour</h3><div className="small muted">Utilisé avec la taille « Tous » · par direction · suspendu en mode reprise</div></div>
       <div className="row"><button className="icon-btn" aria-label="Moins" onClick=${() => majReglages({ nouveauxParJour: Math.max(0, r.nouveauxParJour - 1) })}>−</button>
         <b style=${{ minWidth: 24, textAlign: "center" }}>${r.nouveauxParJour}</b>
         <button className="icon-btn" aria-label="Plus" onClick=${() => majReglages({ nouveauxParJour: r.nouveauxParJour + 1 })}>+</button></div></div>
@@ -457,7 +460,7 @@ function App() {
   const aRevoir = useMemo(() => ({ ef: mots.filter(m => M.estARevoir(m.cartes.ef, jour)).length, fe: mots.filter(m => M.estARevoir(m.cartes.fe, jour)).length }), [mots, jour]);
   const journal = journalDuJour(etat, jour);
   const nouveauxDispo = useMemo(() => {
-    const q = d => Math.max(0, Math.min(mots.filter(m => m.cartes[d].case === 0).length, etat.reglages.nouveauxParJour + journal.bonus[d] - journal.nouveaux[d]));
+    const q = d => Math.max(0, Math.min(mots.filter(m => m.cartes[d].case === 0).length, etat.reglages.nouveauxParJour - journal.nouveaux[d]));
     return { ef: q("ef"), fe: q("fe") };
   }, [mots, etat, jour]);
 
@@ -471,7 +474,9 @@ function App() {
 
   const commencer = () => {
     const p = etat.prefs;
-    const prep = M.preparerSession(mots, p.dir, { taille: tailleReelle(p.taille), aujourdhui: jour, nouveauxDejaVusAujourdhui: journal.nouveaux[p.dir] - journal.bonus[p.dir], revisionsFaitesAujourdhui: journal.revisions, reprise: etat.reprise }, etat.reglages);
+    const tous = p.taille === 0;
+    const reglages = tous ? etat.reglages : { ...etat.reglages, nouveauxParJour: Infinity };
+    const prep = M.preparerSession(mots, p.dir, { taille: tailleReelle(p.taille), aujourdhui: jour, nouveauxDejaVusAujourdhui: tous ? journal.nouveaux[p.dir] : 0, revisionsFaitesAujourdhui: journal.revisions, reprise: etat.reprise }, reglages);
     if (prep.vide) { setMessageSession(prep.message); return; }
     setSession({ ...M.nouvelleSession(prep.cartes), dir: p.dir, mode: p.mode });
     go("carte");
@@ -484,13 +489,11 @@ function App() {
     setSession({ ...M.nouvelleSession(ids), dir: p.dir, mode: p.mode, entrainement: true });
     go("carte");
   };
-  const plusDeNouveaux = () => {
-    const p = etat.prefs; const j = journalDuJour(etat, jour);
-    const e = { ...etat, journal: { ...j, bonus: { ...j.bonus, [p.dir]: j.bonus[p.dir] + 5 } } };
-    sauverEtat(e);
-    const prep = M.preparerSession(mots, p.dir, { taille: tailleReelle(p.taille), aujourdhui: jour, nouveauxDejaVusAujourdhui: j.nouveaux[p.dir] - j.bonus[p.dir] - 5, revisionsFaitesAujourdhui: j.revisions, reprise: null }, etat.reglages);
-    if (prep.vide) return;
-    setSession({ ...M.nouvelleSession(prep.cartes), dir: p.dir, mode: p.mode });
+  const revoirErreurs = () => {
+    const p = etat.prefs;
+    const ids = journal.erreurs[p.dir].filter(id => mots.some(m => m.id === id));
+    if (!ids.length) return;
+    setSession({ ...M.nouvelleSession(M.melanger(ids)), dir: p.dir, mode: p.mode, entrainement: true });
     go("carte");
   };
 
@@ -503,8 +506,9 @@ function App() {
       if (mot) {
         const avant = mot.cartes[session.dir];
         sauverMot({ ...mot, cartes: { ...mot.cartes, [session.dir]: M.appliquerReponse(avant, juste, jour, etat.reglages) } });
-        const j = { ...e.journal, nouveaux: { ...e.journal.nouveaux } };
+        const j = { ...e.journal, nouveaux: { ...e.journal.nouveaux }, erreurs: { ...e.journal.erreurs } };
         if (avant.case === 0) j.nouveaux[session.dir]++; else j.revisions++;
+        if (!juste && !j.erreurs[session.dir].includes(id)) j.erreurs[session.dir] = [...j.erreurs[session.dir], id];
         e = { ...e, journal: j, dernierJourActif: jour, joursActifs: e.joursActifs.includes(jour) ? e.joursActifs : [...e.joursActifs, jour].slice(-800) };
       }
     }
@@ -563,7 +567,7 @@ function App() {
 
   return html`<div className="app">
     ${ecran === "accueil" && html`<${Accueil} mots=${mots} etat=${etatJour} jour=${jour} aRevoir=${aRevoir} nouveauxPrevus=${etat.reprise ? 0 : nouveauxDispo.ef + nouveauxDispo.fe} sync=${sync} go=${go} exporter=${exporter} compte=${compte}/>`}
-    ${ecran === "reviser" && html`<${Reviser} etat=${etatJour} majPrefs=${majPrefs} aRevoir=${aRevoir} nouveauxDispo=${nouveauxDispo} commencer=${commencer} message=${messageSession} nbAppris=${{ ef: mots.filter(m => m.cartes.ef.case > 0).length, fe: mots.filter(m => m.cartes.fe.case > 0).length }} nbNouveaux=${{ ef: mots.filter(m => m.cartes.ef.case === 0).length, fe: mots.filter(m => m.cartes.fe.case === 0).length }} entrainement=${entrainement} plusDeNouveaux=${plusDeNouveaux}/>`}
+    ${ecran === "reviser" && html`<${Reviser} etat=${etatJour} majPrefs=${majPrefs} aRevoir=${aRevoir} nouveauxDispo=${nouveauxDispo} commencer=${commencer} message=${messageSession} nbAppris=${{ ef: mots.filter(m => m.cartes.ef.case > 0).length, fe: mots.filter(m => m.cartes.fe.case > 0).length }} nbNouveaux=${{ ef: mots.filter(m => m.cartes.ef.case === 0).length, fe: mots.filter(m => m.cartes.fe.case === 0).length }} entrainement=${entrainement} revoirErreurs=${revoirErreurs}/>`}
     ${ecran === "ajouter" && html`<${FormMot} page=${true} key="page-ajout" enregistrer=${enregistrer}/>`}
     ${ecran === "stats" && html`<${Stats} mots=${mots} etat=${etatJour} jour=${jour} aRevoir=${aRevoir}/>`}
     ${ecran === "mots" && html`<${ListeMots} mots=${mots} jour=${jour} modifier=${m => setFeuille({ mot: m })}/>`}

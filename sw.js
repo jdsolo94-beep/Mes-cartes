@@ -1,6 +1,6 @@
 // Fonctionnement hors ligne : les fichiers de l'application sont gardés sur l'iPhone.
 // Changer VERSION à chaque mise en ligne pour que l'iPhone récupère la nouvelle version.
-const VERSION = "mescartes-1.0.3";
+const VERSION = "mescartes-1.0.4";
 const FICHIERS = [
   "./", "./index.html", "./manifest.webmanifest",
   "./app/style.css", "./app/app.js", "./app/moteur.js", "./app/stockage.js", "./app/firebase-config.js",
