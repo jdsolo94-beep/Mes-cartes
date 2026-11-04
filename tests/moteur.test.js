@@ -205,3 +205,10 @@ test("oral : rien de reconnu → secours manuel", () => {
   assert.equal(r.juste, false);
   assert.equal(r.secoursManuel, true);
 });
+
+test("entraînement libre : mots appris seulement, les plus faibles d'abord", () => {
+  const mots = [mot("n", carte(0)), mot("c1", carte(1, J + 1)), mot("c5", carte(5, J + 30)), mot("c2", carte(2, J + 3))];
+  const ids = M.preparerEntrainement(mots, "ef", 2, fixe);
+  assert.deepEqual([...ids].sort(), ["c1", "c2"]);
+  assert.equal(M.preparerEntrainement(mots, "ef", 10, fixe).includes("n"), false);
+});

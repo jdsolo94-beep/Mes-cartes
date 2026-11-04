@@ -138,6 +138,17 @@ export function preparerSession(mots, dir, options, reglages = REGLAGES_PAR_DEFA
   return { cartes: melanger(choisis, hasard).map(m => m.id), vide: false, message: "" };
 }
 
+/**
+ * Entraînement libre : mots déjà appris, les moins bien connus d'abord (case la plus basse).
+ * Les réponses n'ont aucun effet sur les cases ni sur le calendrier.
+ */
+export function preparerEntrainement(mots, dir, taille, hasard = Math.random) {
+  const appris = mots.filter(m => m.cartes[dir].case !== CASE_NOUVEAU);
+  // À case égale, ordre au hasard pour varier d'une séance à l'autre
+  const tri = melanger(appris, hasard).sort((a, b) => a.cartes[dir].case - b.cartes[dir].case);
+  return melanger(tri.slice(0, taille), hasard).map(m => m.id);
+}
+
 // ---------- Déroulement d'une session ----------
 
 /** Crée une session à partir d'une liste d'identifiants. */
