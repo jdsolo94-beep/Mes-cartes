@@ -148,7 +148,8 @@ test("variante : plafond de 50 révisions par jour", () => {
 test("fin du mode reprise quand l'arriéré est résorbé", () => {
   const etat = { dernierJourActif: J - 1, reprise: { parJour: 20, depuis: J - 6 } };
   assert.equal(M.majReprise(etat, 0, J).reprise, null);
-  assert.notEqual(M.majReprise(etat, 5, J).reprise, null);
+  assert.equal(M.majReprise(etat, 20, J).reprise, null, "le reste tient dans une journée");
+  assert.notEqual(M.majReprise(etat, 21, J).reprise, null);
 });
 
 // ---------- Statistiques ----------

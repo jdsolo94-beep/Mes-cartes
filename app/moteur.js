@@ -74,7 +74,8 @@ export function majReprise(etat, nbARevoir, aujourdhui, reglages = REGLAGES_PAR_
     const parJour = r.type === "plafond" ? r.valeur : Math.ceil(nbARevoir / r.valeur);
     reprise = { parJour, depuis: aujourdhui };
   }
-  if (reprise && nbARevoir === 0) reprise = null; // arriéré résorbé : retour à la normale
+  // Arriéré résorbé quand ce qui reste tient dans le quota d'une journée : retour à la normale
+  if (reprise && nbARevoir <= reprise.parJour) reprise = null;
   return { ...etat, reprise };
 }
 
