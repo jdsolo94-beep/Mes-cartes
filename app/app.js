@@ -13,6 +13,9 @@ const carteNeuve = () => ({ case: 0, prevu: null, derniere: null });
 const nouveauMot = (en, fr, ex) => ({ id: nouvelId(), en, fr, ex: ex || "", ajouteLe: Date.now(), cartes: { ef: carteNeuve(), fe: carteNeuve() } });
 const boxLabel = b => b === 0 ? "Nouveau" : b === 10 ? "Entretien" : "Case " + b;
 const premiereTrad = t => t.split(",")[0].trim();
+// Taille de session : 10, 20, 40 ou 0 = « Tous les mots du jour »
+const TAILLES = [10, 20, 40, 0];
+const tailleReelle = t => t === 0 ? Infinity : (TAILLES.includes(t) ? t : 20);
 const cleMot = en => M.normaliser(en).replace(/^to /, "");
 
 const parseLot = txt => txt.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
@@ -113,7 +116,8 @@ function Reviser({ etat, majPrefs, aRevoir, nouveauxDispo, commencer, message, n
   const p = etat.prefs;
   const dispo = aRevoir[p.dir] + nouveauxDispo[p.dir];
   const limite = etat.reprise ? Math.max(0, etat.reprise.parJour - etat.journal.revisions) : Infinity;
-  const total = Math.min(p.taille, Math.min(aRevoir[p.dir], limite) + (etat.reprise ? 0 : nouveauxDispo[p.dir]));
+  const taille = tailleReelle(p.taille);
+  const total = Math.min(taille, Math.min(aRevoir[p.dir], limite) + (etat.reprise ? 0 : nouveauxDispo[p.dir]));
   return html`<div className="stack" style=${{ gap: 18 }}>
     <div><div className="label">Réviser</div><h1>Préparer la session</h1></div>
     <div className="stack" style=${{ gap: 8 }}><div className="label">Direction</div>
@@ -122,9 +126,10 @@ function Reviser({ etat, majPrefs, aRevoir, nouveauxDispo, commencer, message, n
       <${Seg} options=${[["ecrit", "Écrit"], ["oral", "Oral"]]} valeur=${p.mode} choisir=${v => majPrefs({ mode: v })}/>
       <div className="small muted">${p.mode === "ecrit" ? "Vous tapez la traduction. Le micro du clavier (dictée) fonctionne aussi." : "Vous répondez à voix haute, vous touchez la carte pour voir la réponse, puis vous indiquez si vous saviez."}</div></div>
     <div className="stack" style=${{ gap: 8 }}><div className="label">Taille de la session</div>
-      <${Seg} options=${[10, 20, 30, 40, 50].map(n => [n, String(n)])} valeur=${p.taille} choisir=${v => majPrefs({ taille: v })}/></div>
+      <${Seg} options=${TAILLES.map(n => [n, n === 0 ? "Tous" : String(n)])} valeur=${TAILLES.includes(p.taille) ? p.taille : 20} choisir=${v => majPrefs({ taille: v })}/></div>
     <div className="panel"><b>${aRevoir[p.dir]} à réviser + ${etat.reprise ? 0 : nouveauxDispo[p.dir]} nouveaux</b>
-      <div className="small muted">${total > 0 ? "Cette session comptera " + total + " carte" + (total > 1 ? "s" : "") + (total < p.taille ? " (il n'y en a pas davantage aujourd'hui)." : ".") : "Aucune carte disponible dans cette direction aujourd'hui."}</div></div>
+      ${p.taille === 0 && html`<div className="small muted">« Tous » : tous les mots prévus aujourd'hui, plus les nouveaux mots du jour, en une seule session.</div>`}
+      <div className="small muted">${total > 0 ? "Cette session comptera " + total + " carte" + (total > 1 ? "s" : "") + (total < taille && p.taille !== 0 ? " (il n'y en a pas davantage aujourd'hui)." : ".") : "Aucune carte disponible dans cette direction aujourd'hui."}</div></div>
     ${message && html`<div className="banner info small">${message}</div>`}
     <button className="btn primary block" disabled=${dispo === 0} style=${{ fontSize: "1.1rem", padding: 16, opacity: dispo ? 1 : .5 }} onClick=${commencer}>Commencer</button>
     ${dispo === 0 && (nbAppris[p.dir] > 0 || (nbNouveaux[p.dir] > 0 && !etat.reprise)) && html`<div className="panel stack">
@@ -466,7 +471,7 @@ function App() {
 
   const commencer = () => {
     const p = etat.prefs;
-    const prep = M.preparerSession(mots, p.dir, { taille: p.taille, aujourdhui: jour, nouveauxDejaVusAujourdhui: journal.nouveaux[p.dir] - journal.bonus[p.dir], revisionsFaitesAujourdhui: journal.revisions, reprise: etat.reprise }, etat.reglages);
+    const prep = M.preparerSession(mots, p.dir, { taille: tailleReelle(p.taille), aujourdhui: jour, nouveauxDejaVusAujourdhui: journal.nouveaux[p.dir] - journal.bonus[p.dir], revisionsFaitesAujourdhui: journal.revisions, reprise: etat.reprise }, etat.reglages);
     if (prep.vide) { setMessageSession(prep.message); return; }
     setSession({ ...M.nouvelleSession(prep.cartes), dir: p.dir, mode: p.mode });
     go("carte");
@@ -474,7 +479,7 @@ function App() {
 
   const entrainement = () => {
     const p = etat.prefs;
-    const ids = M.preparerEntrainement(mots, p.dir, p.taille);
+    const ids = M.preparerEntrainement(mots, p.dir, tailleReelle(p.taille));
     if (!ids.length) return;
     setSession({ ...M.nouvelleSession(ids), dir: p.dir, mode: p.mode, entrainement: true });
     go("carte");
@@ -483,7 +488,7 @@ function App() {
     const p = etat.prefs; const j = journalDuJour(etat, jour);
     const e = { ...etat, journal: { ...j, bonus: { ...j.bonus, [p.dir]: j.bonus[p.dir] + 5 } } };
     sauverEtat(e);
-    const prep = M.preparerSession(mots, p.dir, { taille: p.taille, aujourdhui: jour, nouveauxDejaVusAujourdhui: j.nouveaux[p.dir] - j.bonus[p.dir] - 5, revisionsFaitesAujourdhui: j.revisions, reprise: null }, etat.reglages);
+    const prep = M.preparerSession(mots, p.dir, { taille: tailleReelle(p.taille), aujourdhui: jour, nouveauxDejaVusAujourdhui: j.nouveaux[p.dir] - j.bonus[p.dir] - 5, revisionsFaitesAujourdhui: j.revisions, reprise: null }, etat.reglages);
     if (prep.vide) return;
     setSession({ ...M.nouvelleSession(prep.cartes), dir: p.dir, mode: p.mode });
     go("carte");
