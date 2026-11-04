@@ -327,7 +327,7 @@ function Compte({ compte, email, sync }) {
     <button className="btn ghost block" onClick=${() => S.deconnecter()}>Se déconnecter</button></div>`;
   return html`<form className="panel stack" onSubmit=${e => { e.preventDefault(); agir(() => S.connecter(mail.trim(), mdp)); }}>
     <h3>Sauvegarde en ligne</h3>
-    <div className="small muted">Connectez-vous pour sauvegarder vos mots en ligne. La première fois, choisissez « Créer mon compte ».</div>
+    <div className="small muted">Connectez-vous pour sauvegarder vos mots en ligne. Si vous n'avez pas encore de compte, choisissez « Créer mon compte ».</div>
     <div className="field"><label className="label" htmlFor="c-mail">E-mail</label><input id="c-mail" type="email" autoComplete="username" value=${mail} onChange=${e => setMail(e.target.value)} autoCapitalize="off"/></div>
     <div className="field"><label className="label" htmlFor="c-mdp">Mot de passe</label><input id="c-mdp" type="password" autoComplete="current-password" value=${mdp} onChange=${e => setMdp(e.target.value)}/></div>
     ${err && html`<div className="form-err">${err}</div>`}${info && html`<div className="note">${info}</div>`}
